@@ -114,11 +114,25 @@ int simpleUpSample(UINT32* source, int sourceWidth, int sourceHeight, UINT32* ta
 	}
 }
 
+int noSample(UINT32* source, int sourceWidth, int sourceHeight, UINT32* target, int targetWidth, int targetHeight, int sampleStyle) {
+	for (int i = 0; i < sourceHeight * sourceWidth; i++) {
+		target[i] = source[i]; // Copy pixel directly
+	}
+}
+
 int sample(canvas_t* frameBuffer, int targetWidth, int targetHeight, UINT32* targetBuffer, int sampleStyle) {
 	if (!frameBuffer || !frameBuffer->pixels_show) {
 		return FALSE; // Invalid frame buffer
 	}
-	if(frameBuffer->width % targetWidth == 0 || frameBuffer->height % targetHeight == 0) {
+	if (frameBuffer->width == targetWidth && frameBuffer->height % targetHeight) {
+		return noSample(frameBuffer->pixels_show,
+			frameBuffer->width, frameBuffer->height,
+			targetBuffer,
+			targetWidth, targetHeight,
+			sampleStyle
+		);
+	}
+	if(frameBuffer->width % targetWidth == 0 && frameBuffer->height % targetHeight == 0) {
 		return simpleDownSample(frameBuffer->pixels_show, 
 			frameBuffer->width, frameBuffer->height, 
 			targetBuffer,
@@ -126,7 +140,7 @@ int sample(canvas_t* frameBuffer, int targetWidth, int targetHeight, UINT32* tar
 			sampleStyle
 		);
 	}
-	if(targetWidth % frameBuffer->width == 0 || targetHeight % frameBuffer->height == 0) {
+	if(targetWidth % frameBuffer->width == 0 && targetHeight % frameBuffer->height == 0) {
 		return simpleUpSample(frameBuffer->pixels_show, 
 			frameBuffer->width, frameBuffer->height, 
 			targetBuffer,
@@ -135,5 +149,5 @@ int sample(canvas_t* frameBuffer, int targetWidth, int targetHeight, UINT32* tar
 		);
 	}
 
-	return FALSE; // Unsupported sample operation
+	return FALSE; // Unsupported sampling operation
 }

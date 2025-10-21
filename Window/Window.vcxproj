@@ -126,6 +126,9 @@
     <ClCompile Include="HelloWindowsDesktop.c" />
     <ClCompile Include="picSample.c" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="picSample.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

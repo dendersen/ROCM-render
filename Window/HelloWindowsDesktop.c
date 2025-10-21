@@ -3,28 +3,24 @@
 #endif 
 
 #include <windows.h>
-
-#if RAND_MAX == 32767
-#define Rand32() ((rand() << 16) + (rand() << 1) + (rand() & 1))
-#else
-#define Rand32() rand()
-#endif
+#include "picSample.h"
 
 static BOOL quit = FALSE;
-
-struct frame_t{
-    int width;
-    int height;
-    UINT32 *pixels; // Pointer to pixel data
-} frame = {0};
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 static BITMAPINFO frameBitmapInfo;
 static HBITMAP frameBitmap;
+static HBITMAP frameBitmapSecond;
 static HDC frameDC;
 
+int state = 0; // 0 or 1
+
+canvas_t canvas = {0};
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
+    init(&canvas);
+    
     // Register the window class.
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
 
@@ -68,17 +64,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     while (!quit) {
         // Run the message loop.
         static MSG msg = { 0 };
-        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        int ret = 0;
+        while (GetMessage(&msg, NULL, 0, 0)) {
+            TranslateMessage(&msg);
             DispatchMessage(&msg); 
         }
-		InvalidateRect(hwnd, NULL, FALSE);
-        UpdateWindow(hwnd);
-
-        static unsigned int p = 0;
-        int perRun = 100;
-        for (int i = 0; i < perRun; i++) {
-            frame.pixels[(p++) % (frame.width * frame.height)] = Rand32(); // Fill with color
-            frame.pixels[Rand32() % (frame.width * frame.height)] = 0;
+        DWORD wait = WaitForSingleObject(canvas.show_mutex,10);
+        if (wait != 0) {
+            InvalidateRect(hwnd, NULL, FALSE);
+            UpdateWindow(hwnd);
+            ReleaseMutex(canvas.show_mutex);
         }
     }
 
@@ -95,6 +90,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
             
+            if (state == 0) {
+                SelectObject(frameDC, frameBitmapSecond);
+				state = 1;
+            }else if(state == 1) {
+                SelectObject(frameDC, frameBitmap);
+				state = 0;
+            }
 
             BitBlt(hdc,
 				ps.rcPaint.left,
@@ -110,15 +112,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
         case WM_SIZE: {
+            WaitForSingleObject(canvas.process_mutex, INFINITE);
+            WaitForSingleObject(canvas.show_mutex, INFINITE);
 			frameBitmapInfo.bmiHeader.biWidth = LOWORD(lParam);
-			frameBitmapInfo.bmiHeader.biHeight = HIWORD(lParam); // Negative height for top-down bitmap
+			frameBitmapInfo.bmiHeader.biHeight = -HIWORD(lParam); // Negative height for top-down bitmap
             if(frameBitmap) {
                 DeleteObject(frameBitmap);
 			}
-			frameBitmap = CreateDIBSection(NULL, &frameBitmapInfo, DIB_RGB_COLORS, &frame.pixels, 0, 0);
+            frameBitmapSecond = CreateDIBSection(NULL, &frameBitmapInfo, DIB_RGB_COLORS, (&canvas)->pixels_process, 0, 0);
+            frameBitmap = CreateDIBSection(NULL, &frameBitmapInfo, DIB_RGB_COLORS, (&canvas)->pixels_show, 0, 0);
 			SelectObject(frameDC, frameBitmap);
-			frame.width = LOWORD(lParam);
-			frame.height = HIWORD(lParam);
+            state = 0;
+            canvas.width = LOWORD(lParam);
+            canvas.height = HIWORD(lParam);
+            ReleaseMutex(canvas.process_mutex);
+            ReleaseMutex(canvas.show_mutex);
             return 0;
         }
     }
